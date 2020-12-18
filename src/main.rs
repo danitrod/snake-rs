@@ -59,9 +59,6 @@ impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let now = Instant::now();
         if now.duration_since(self.last_tick) > self.tick {
-            if self.snake.len() > 1 {
-                self.snake = self.snake[0..self.snake_size - 1].to_vec();
-            }
             if self.snake[0].0 >= SCREEN_WIDTH {
                 self.snake.insert(0, (0., self.snake[0].1));
             } else if self.snake[0].0 < 0. {
@@ -169,6 +166,11 @@ impl event::EventHandler for MainState {
             if self.snake[1..self.snake_size].contains(&self.snake[0]) {
                 self.game_mode = 1;
             }
+        }
+
+        // Trim snake to its size
+        if self.snake.len() > self.snake_size {
+            self.snake = self.snake[0..self.snake_size].to_vec();
         }
 
         Ok(())
