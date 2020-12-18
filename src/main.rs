@@ -2,23 +2,23 @@ mod constants;
 mod drawing;
 mod random;
 
-use constants::*;
+use constants::{dynamics::*, graphics::BG_COLOR, grid::*};
 use drawing::drawing;
 use ggez::{
     self,
     conf::{FullscreenType, NumSamples, WindowMode, WindowSetup},
     event::{self, KeyCode, KeyMods},
-    graphics::{self, Color},
+    graphics::{self, Color, Font, Scale},
     input::keyboard,
-    Context, GameResult,
+    nalgebra as na, Context, GameResult,
 };
 use random::Random;
 use std::env;
 use std::path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(PartialEq)]
-enum Direction {
+pub enum Direction {
     Up,
     Down,
     Left,
@@ -32,7 +32,10 @@ struct MainState {
     direction: Direction,
     key_pressed: Direction,
     last_tick: Instant,
+    tick: Duration,
     food_pos: (f32, f32),
+    rng: Random,
+    game_mode: u8,
 }
 
 impl MainState {
@@ -42,8 +45,11 @@ impl MainState {
             snake_size: INITIAL_SNAKE_SIZE,
             direction: Right,
             key_pressed: Right,
+            tick: INITIAL_TICK_INTERVAL,
             last_tick: Instant::now(),
             food_pos: rng.random_food(NUM_COLS, NUM_ROWS, CELL_SIZE, None),
+            rng,
+            game_mode: 0,
         };
         Ok(s)
     }
@@ -52,20 +58,20 @@ impl MainState {
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let now = Instant::now();
-        if now.duration_since(self.last_tick) > TICK_INTERVAL {
+        if now.duration_since(self.last_tick) > self.tick {
             if self.snake.len() > 1 {
                 self.snake = self.snake[0..self.snake_size - 1].to_vec();
             }
-            if self.snake[0].0 > SCREEN_WIDTH {
-                println!("Setting {:?} to zero", self.snake);
+            if self.snake[0].0 >= SCREEN_WIDTH {
                 self.snake.insert(0, (0., self.snake[0].1));
-                println!("{:?}", self.snake);
             } else if self.snake[0].0 < 0. {
-                self.snake.insert(0, (SCREEN_WIDTH, self.snake[0].1));
-            } else if self.snake[0].1 > SCREEN_HEIGHT {
+                self.snake
+                    .insert(0, (SCREEN_WIDTH - CELL_SIZE, self.snake[0].1));
+            } else if self.snake[0].1 >= SCREEN_HEIGHT {
                 self.snake.insert(0, (self.snake[0].0, 0.));
             } else if self.snake[0].1 < 0. {
-                self.snake.insert(0, (self.snake[0].0, SCREEN_HEIGHT));
+                self.snake
+                    .insert(0, (self.snake[0].0, SCREEN_HEIGHT - CELL_SIZE));
             } else {
                 match self.direction {
                     Up => self
@@ -82,7 +88,6 @@ impl event::EventHandler for MainState {
                         .insert(0, (self.snake[0].0 + CELL_SIZE, self.snake[0].1)),
                 }
             }
-            self.food_pos.1 += 1.;
             self.last_tick = now;
         }
         if self.direction != self.key_pressed {
@@ -92,6 +97,7 @@ impl event::EventHandler for MainState {
                         self.direction = Up;
                         self.snake
                             .insert(0, (self.snake[0].0, self.snake[0].1 - CELL_SIZE));
+                        self.last_tick = Instant::now();
                     }
                 }
                 Down => {
@@ -99,6 +105,7 @@ impl event::EventHandler for MainState {
                         self.direction = Down;
                         self.snake
                             .insert(0, (self.snake[0].0, self.snake[0].1 + CELL_SIZE));
+                        self.last_tick = Instant::now();
                     }
                 }
                 Left => {
@@ -106,6 +113,7 @@ impl event::EventHandler for MainState {
                         self.direction = Left;
                         self.snake
                             .insert(0, (self.snake[0].0 - CELL_SIZE, self.snake[0].1));
+                        self.last_tick = Instant::now();
                     }
                 }
                 Right => {
@@ -113,6 +121,7 @@ impl event::EventHandler for MainState {
                         self.direction = Right;
                         self.snake
                             .insert(0, (self.snake[0].0 + CELL_SIZE, self.snake[0].1));
+                        self.last_tick = Instant::now();
                     }
                 }
             }
@@ -143,15 +152,65 @@ impl event::EventHandler for MainState {
             self.key_pressed = Right;
         }
 
-        // println!("snake updated: {:?} (sw: {})", self.snake, SCREEN_WIDTH);
+        // Snake eats food
+        if self.snake[0].0 == self.food_pos.0 && self.snake[0].1 == self.food_pos.1 {
+            self.snake_size += 1;
+            self.food_pos = self
+                .rng
+                .random_food(NUM_COLS, NUM_ROWS, CELL_SIZE, Some(&self.snake));
+            // Accelerate game
+            if self.snake_size - INITIAL_SNAKE_SIZE % ACCELERATION_GAP == 0 {
+                self.tick = self.tick - ACCELERATION_VALUE;
+            }
+        }
+
+        // Kill snake if it hits body
+        if self.snake.len() >= self.snake_size {
+            if self.snake[1..self.snake_size].contains(&self.snake[0]) {
+                self.game_mode = 1;
+            }
+        }
+
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        graphics::clear(ctx, Color::from_rgb(144, 144, 255).into());
-        drawing(ctx, &self.snake, self.food_pos)?;
-        graphics::present(ctx)?;
-        Ok(())
+        match self.game_mode {
+            0 => {
+                let (r, g, b) = BG_COLOR;
+                graphics::clear(ctx, Color::from_rgb(r, g, b).into());
+                drawing(
+                    ctx,
+                    &self.snake,
+                    self.food_pos,
+                    &self.direction,
+                    self.snake_size - INITIAL_SNAKE_SIZE,
+                )?;
+                graphics::present(ctx)?;
+                Ok(())
+            }
+            1 => {
+                graphics::clear(ctx, Color::from_rgb(90, 20, 30).into());
+                let mut score_txt = graphics::Text::new(format!(
+                    "You lost. Score: {}",
+                    self.snake_size - INITIAL_SNAKE_SIZE
+                ));
+                let score_txt = score_txt.set_font(Font::default(), Scale { x: 32., y: 32. });
+                let w = score_txt.width(ctx) as f32;
+                let h = score_txt.height(ctx) as f32;
+                graphics::draw(
+                    ctx,
+                    score_txt,
+                    (na::Point2::new(
+                        SCREEN_CENTER.0 - w / 2.,
+                        SCREEN_CENTER.1 - h / 2.,
+                    ),),
+                )?;
+                graphics::present(ctx)?;
+                Ok(())
+            }
+            _ => panic!(),
+        }
     }
 
     fn key_down_event(&mut self, ctx: &mut Context, key: KeyCode, mods: KeyMods, _: bool) {
@@ -179,7 +238,6 @@ pub fn main() -> GameResult {
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
         path.push("resources");
-        println!("Adding path {:?}", path);
         cb = cb.add_resource_path(path);
     }
     cb = cb.window_mode(WindowMode {
