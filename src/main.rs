@@ -57,6 +57,18 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
+        // Snake eats food
+        if self.snake[0].0 == self.food_pos.0 && self.snake[0].1 == self.food_pos.1 {
+            self.snake_size += 1;
+            self.food_pos = self
+                .rng
+                .random_food(NUM_COLS, NUM_ROWS, CELL_SIZE, Some(&self.snake));
+            // Accelerate game
+            if (self.snake_size - INITIAL_SNAKE_SIZE) % ACCELERATION_GAP == 0 {
+                self.tick = self.tick - ACCELERATION_VALUE;
+            }
+        }
+
         let now = Instant::now();
         if now.duration_since(self.last_tick) > self.tick {
             if self.snake[0].0 >= SCREEN_WIDTH {
@@ -147,18 +159,6 @@ impl event::EventHandler for MainState {
             && self.direction != Right
         {
             self.key_pressed = Right;
-        }
-
-        // Snake eats food
-        if self.snake[0].0 == self.food_pos.0 && self.snake[0].1 == self.food_pos.1 {
-            self.snake_size += 1;
-            self.food_pos = self
-                .rng
-                .random_food(NUM_COLS, NUM_ROWS, CELL_SIZE, Some(&self.snake));
-            // Accelerate game
-            if (self.snake_size - INITIAL_SNAKE_SIZE) % ACCELERATION_GAP == 0 {
-                self.tick = self.tick - ACCELERATION_VALUE;
-            }
         }
 
         // Kill snake if it hits body
