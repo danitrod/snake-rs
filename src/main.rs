@@ -159,7 +159,7 @@ impl event::EventHandler for MainState {
                 .rng
                 .random_food(NUM_COLS, NUM_ROWS, CELL_SIZE, Some(&self.snake));
             // Accelerate game
-            if self.snake_size - INITIAL_SNAKE_SIZE % ACCELERATION_GAP == 0 {
+            if (self.snake_size - INITIAL_SNAKE_SIZE) % ACCELERATION_GAP == 0 {
                 self.tick = self.tick - ACCELERATION_VALUE;
             }
         }

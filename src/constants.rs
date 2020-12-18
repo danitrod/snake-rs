@@ -14,7 +14,7 @@ pub mod dynamics {
   pub const INITIAL_SNAKE_SIZE: usize = 3;
   pub const INITIAL_TICK_INTERVAL: Duration = Duration::from_millis(300);
   pub const ACCELERATION_GAP: usize = 3;
-  pub const ACCELERATION_VALUE: Duration = Duration::from_millis(20);
+  pub const ACCELERATION_VALUE: Duration = Duration::from_millis(10);
 }
 
 // Graphics
